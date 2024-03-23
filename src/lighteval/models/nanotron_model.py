@@ -962,7 +962,8 @@ class NanotronLightevalModel(LightevalModel):
                     dist.all_gather(gathered_out, out, group=self.parallel_context.tp_pg, async_op=False)
                     out = torch.cat(gathered_out, dim=-1)
 
-                    out = out.transpose(0, 1)  # [batch, seq_length, vocab]
+                    #NOTE(fmom): comment out for mamba
+                    # out = out.transpose(0, 1)  # [batch, seq_length, vocab]
                     multi_logits = F.log_softmax(out, dim=-1)  # [batch, padding_length, vocab]
 
                     logits_sum = []
