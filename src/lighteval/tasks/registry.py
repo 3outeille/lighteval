@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import collections
 import importlib
 import os
@@ -10,12 +32,28 @@ from datasets import Dataset
 from datasets.load import dataset_module_factory
 
 from lighteval.logging.hierarchical_logger import hlog, hlog_warn
+from lighteval.tasks.extended import AVAILABLE_EXTENDED_TASKS_MODULES
 from lighteval.tasks.lighteval_task import LightevalTask, LightevalTaskConfig
+from lighteval.utils import CANNOT_USE_EXTENDED_TASKS_MSG, can_load_extended_tasks
 
 
-# original is the reimplementation of original evals
-# custom is to play around
-DEFAULT_SUITES = ["helm", "bigbench", "lighteval", "original", "custom"]
+# Helm, Bigbench, Harness are implementations following an evaluation suite setup
+# Original follows the original implementation as closely as possible
+# Leaderboard are the evaluations we fixed on the open llm leaderboard - you should get similar results
+# Community are for community added evaluations
+# Extended are for evaluations with custom logic
+# Custom is for all the experiments you might want to do!
+DEFAULT_SUITES = [
+    "helm",
+    "bigbench",
+    "harness",
+    "leaderboard",
+    "lighteval",
+    "original",
+    "extended",
+    "custom",
+    "community",
+]
 
 TRUNCATE_FEW_SHOTS_DEFAULTS = True
 
@@ -80,6 +118,7 @@ class Registry:
         Args:
             task_name_list (List[str]): A list of task names.
             custom_tasks (Optional[Union[str, ModuleType]]): Path to the custom tasks file or name of a module to import containing custom tasks or the module it-self
+            extended_tasks (Optional[str]): The path to the extended tasks group of submodules
 
         Returns:
             Dict[str, LightevalTask]: A dictionary containing the tasks.
@@ -90,13 +129,21 @@ class Registry:
         """
         # Import custom tasks provided by the user
         custom_tasks_registry = None
-        custom_tasks_module = None
+        custom_tasks_module = []
+        TASKS_TABLE = []
         if custom_tasks is not None:
-            custom_tasks_module = create_custom_tasks_module(custom_tasks=custom_tasks)
-        if custom_tasks_module is not None:
-            custom_tasks_registry = create_config_tasks(
-                meta_table=custom_tasks_module.TASKS_TABLE, cache_dir=self.cache_dir
-            )
+            custom_tasks_module.append(create_custom_tasks_module(custom_tasks=custom_tasks))
+        if can_load_extended_tasks():
+            for extended_task_module in AVAILABLE_EXTENDED_TASKS_MODULES:
+                custom_tasks_module.append(extended_task_module)
+        else:
+            hlog_warn(CANNOT_USE_EXTENDED_TASKS_MSG)
+
+        for module in custom_tasks_module:
+            TASKS_TABLE.extend(module.TASKS_TABLE)
+
+        if len(TASKS_TABLE) > 0:
+            custom_tasks_registry = create_config_tasks(meta_table=TASKS_TABLE, cache_dir=self.cache_dir)
             hlog(custom_tasks_registry)
 
         # Select relevant tasks given the subset asked for by the user
@@ -128,7 +175,7 @@ def create_custom_tasks_module(custom_tasks: Union[str, ModuleType]) -> ModuleTy
 
 
 def get_custom_tasks(custom_tasks: Union[str, ModuleType]) -> Tuple[ModuleType, str]:
-    """Get custom tasks from the given custom tasks file or module.
+    """Get all the custom tasks available from the given custom tasks file or module.
 
     Args:
         custom_tasks (Optional[Union[str, ModuleType]]): Path to the custom tasks file or name of a module to import containing custom tasks or the module it-self

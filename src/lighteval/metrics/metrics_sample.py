@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 """This module manages all the metrics occurring at the sample level. The results of said metrics are then aggregated
 using simple function (min, mean, max, ...) at the corpus level. Most metrics fall under this category.
 """
@@ -211,10 +233,8 @@ class LoglikelihoodAcc:
         if self.length_normalization:
             normalized_log_probs = []
             for ix, choice in enumerate(formatted_doc.choices):
-                if self.ignore_first_space:
-                    normalized_log_probs.append(
-                        choices_logprob[ix] / (len(choice) - 1 if choice[0] == " " else len(choice))
-                    )
+                if self.ignore_first_space and choice[0] == " ":
+                    normalized_log_probs.append(choices_logprob[ix] / (len(choice) - 1))
                 else:
                     normalized_log_probs.append(choices_logprob[ix] / len(choice))
 

@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import os
 import random
 import shutil
@@ -51,7 +73,6 @@ def main(args):
         model_config = create_model_config(args=args, accelerator=accelerator)
 
     with htrack_block("Model loading"):
-        # We need to load the model in the main process first to avoid downloading the model multiple times
         with accelerator.main_process_first() if accelerator is not None else nullcontext():
             model, model_info = load_model(config=model_config, env_config=env_config)
             evaluation_tracker.general_config_logger.log_model_info(model_info)
@@ -62,20 +83,20 @@ def main(args):
             task_dict = Registry(cache_dir=env_config.cache_dir).get_task_dict(
                 task_names_list, custom_tasks=args.custom_tasks
             )
-            # Loading all the dataset in a distributed manner
             LightevalTask.load_datasets(task_dict.values(), args.dataset_loading_processes)
 
             evaluation_tracker.task_config_logger.log(task_dict)
 
             hlog("Loading documents, and requests")
             requests, docs = create_requests_from_tasks(
-                task_dict,
-                few_shots_dict,
-                args.num_fewshot_seeds,
-                model,
-                args.max_samples,
-                evaluation_tracker,
-                args.use_chat_template,
+                task_dict=task_dict,
+                fewshot_dict=few_shots_dict,
+                num_fewshot_seeds=args.num_fewshot_seeds,
+                lm=model,
+                max_samples=args.max_samples,
+                evaluation_tracker=evaluation_tracker,
+                use_chat_template=args.use_chat_template,
+                system_prompt=args.system_prompt,
             )
 
     with htrack_block("Setting seeds and waiting for all processes"):
@@ -110,17 +131,15 @@ def main(args):
             final_dict = evaluation_tracker.generate_final_dict()
 
         with htrack_block("Cleaninp up"):
-            if args.delta_weights:
-                tmp_weights_dir = f"{evaluation_tracker.general_config_logger.model_name}-delta-applied"
-                hlog(f"Removing {tmp_weights_dir}")
-                shutil.rmtree(tmp_weights_dir)
-            if args.adapter_weights:
-                tmp_weights_dir = f"{evaluation_tracker.general_config_logger.model_name}-adapter-applied"
-                hlog(f"Removing {tmp_weights_dir}")
-                shutil.rmtree(tmp_weights_dir)
+            for weights in ["delta", "adapter"]:
+                try:
+                    tmp_weights_dir = f"{evaluation_tracker.general_config_logger.model_name}-{weights}-applied"
+                    hlog(f"Removing {tmp_weights_dir}")
+                    shutil.rmtree(tmp_weights_dir)
+                except OSError:
+                    pass
 
         print(make_results_table(final_dict))
 
         model.cleanup()
-
         return final_dict

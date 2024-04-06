@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 """This file should be launched using `python -m pytest script_name.py`. It must stay at the same level or above as main"""
 import os
 
@@ -7,11 +29,7 @@ from pytest import approx
 from lighteval.main_accelerate import main  # noqa: E402
 from run_evals_accelerate import get_parser
 from tests.reference_scores.reference_task_scores import RESULTS_FULL, RESULTS_LITE  # noqa: E402
-from tests.reference_scores.reference_tasks import (  # noqa: E402
-    HELM_SUBSET,
-    LEADERBOARD_SUBSET,
-    STABLE_SUBSET,
-)
+from tests.reference_scores.reference_tasks import ALL_SUBSETS
 
 
 # Set env var for deterministic run of models
@@ -24,7 +42,7 @@ os.environ["HF_HOME"] = "cache/models/"
 # To add new models or tasks, change here
 # ! The correct results must be present in reference_task_scores
 MODELS = ["gpt2"]
-TASKS = LEADERBOARD_SUBSET + STABLE_SUBSET + HELM_SUBSET
+TASKS = ALL_SUBSETS
 FULL_TEST = os.environ.get("LIGHTEVAL_FULL_TEST", False)
 
 

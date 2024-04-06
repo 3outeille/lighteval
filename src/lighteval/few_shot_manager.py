@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import random
 from collections import defaultdict
 from dataclasses import dataclass
@@ -5,7 +27,7 @@ from enum import Enum
 from itertools import cycle
 from typing import TYPE_CHECKING, Optional
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from lighteval.logging.hierarchical_logger import hlog_warn
 from lighteval.tasks.requests import Doc
@@ -163,16 +185,22 @@ class FewShotSampler:
         example: str,
         instruction: str,
         fewshot_ex: list[str],
+        system_prompt: str,
     ):
         examples = []
+        if system_prompt is not None:
+            examples.append({"role": "system", "content": system_prompt})
         for ex in fewshot_ex:
-            # many places to put these "\n" though
             examples.append({"role": "user", "content": task.doc_to_text_without_instructions(ex)})
             examples.append({"role": "assistant", "content": task.doc_to_target(ex)})
         # We add the actual example
         examples.append({"role": "user", "content": example})
-        # We add the initial instruction if present
-        examples[0]["content"] = instruction + examples[0]["content"]
+        # We add the initial instruction if present, after the system prompt of before the task
+        if examples[0]["role"] == "system":
+            examples[0]["content"] = examples[0]["content"] + instruction
+        else:
+            examples[0]["content"] = instruction + examples[0]["content"]
+
         return tokenizer.apply_chat_template(examples, tokenize=False, add_generation_prompt=True)
 
     def get_examples(
@@ -191,6 +219,46 @@ class FewShotSampler:
         )
         return instruction + labeled_examples + example
 
+    def create_multi_turn_contexts(
+        self, doc: Doc, use_chat_template: bool, system_prompt: Optional[str], tokenizer: PreTrainedTokenizer
+    ) -> list[str]:
+        """Creates N contexts (depending on the number of turn) for a tasks.
+        Multi turn tasks need use chat templating.
+
+        Args:
+            doc (Doc): Formated document.
+            use_chat_template (bool): wether or not to use chat template. Will fail if false.
+            system_prompt (Optional[str]): The system prompt to use
+            tokenizer (PreTrainedTokenizer): The tokenizer used for the chat template
+
+        Raises:
+            ValueError: If use_chat_template is set to false.
+
+        Returns:
+            list[str]: contexts for every turn
+        """
+        if not use_chat_template:
+            raise ValueError("You need to use the chat template to create multi turn contexts")
+
+        role_content_list = []
+        if system_prompt is not None:
+            role_content_list.append({"role": "system", "content": system_prompt})
+
+        for i in doc.specific["multi_turn_queries"]:
+            role_content_list.append({"role": "user", "content": i})
+            role_content_list.append({"role": "assistant", "content": "{model_response}"})
+        role_content_list.pop(-1)
+
+        contexts = []
+        offset = 2 if system_prompt is not None else 1
+        for i in range(0, len(role_content_list), offset + 1):
+            c = tokenizer.apply_chat_template(
+                role_content_list[: i + offset], add_generation_prompt=True, tokenize=False, add_special_tokens=False
+            )
+            contexts.append(c)
+
+        return contexts, 0
+
     def fewshot_context(
         self,
         task: "LightevalTask",
@@ -202,6 +270,7 @@ class FewShotSampler:
         max_model_length: Optional[int] = None,
         tokenizer: Optional[AutoTokenizer] = None,
         use_chat_template=False,
+        system_prompt: str = None,
     ):
         """Returns a fewshot context string that is made up of a prepended description
         (if provided), the `num_fewshot` number of examples, and an appended prompt example.
@@ -230,7 +299,12 @@ class FewShotSampler:
 
         if use_chat_template:
             output = self.get_examples_with_chat_template(
-                task=task, tokenizer=tokenizer, example=example, instruction=instruction, fewshot_ex=fewshot_ex
+                task=task,
+                tokenizer=tokenizer,
+                example=example,
+                instruction=instruction,
+                fewshot_ex=fewshot_ex,
+                system_prompt=system_prompt,
             )
             toks = tokenizer(output)["input_ids"]
         else:
@@ -254,6 +328,7 @@ class FewShotSampler:
                         example=example,
                         instruction=instruction,
                         fewshot_ex=fewshot_ex[:num_effective_fewshots],
+                        system_prompt=system_prompt,
                     )
                     toks = tokenizer(output)["input_ids"]
                 else:

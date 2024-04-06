@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 # Adapted from https://github.com/EleutherAI/lm-evaluation-harness/blob/master/lm_eval/evaluator.py
 # Adds support for Prompt templates
 
@@ -66,6 +88,8 @@ def evaluate(  # noqa: C901
             full_resps = lm.greedy_until_with_logits(requests, override_bs=override_bs)
         elif request_type == RequestType.LOGLIKELIHOOD_ROLLING:
             full_resps = lm.loglikelihood_rolling(requests, override_bs=override_bs)
+        elif request_type == RequestType.GREEDY_UNTIL_MULTI_TURN:
+            full_resps = lm.greedy_until_multi_turn(requests, override_bs=override_bs)
         else:
             raise NotImplementedError(f"Request type {request_type} not supported")
 
@@ -93,8 +117,22 @@ def evaluate(  # noqa: C901
         # using a deep copy here because process results pops from the model responses
         metrics = task.process_results(doc, copy.deepcopy(model_responses))
 
+        # Remove the user_prompt from the metrics in case of llm-as-judge metric
+        if "user_prompt" in metrics:
+            user_prompt = metrics["user_prompt"]
+            del metrics["user_prompt"]
+        else:
+            user_prompt = None
+        if "judgement" in metrics:
+            judgement = metrics["judgement"]
+            del metrics["judgement"]
+        else:
+            judgement = None
+
         evaluation_tracker.metrics_logger.log(task_example_id.task_name, metrics)
-        evaluation_tracker.details_logger.log(task_example_id.task_name, task, doc, model_responses, metrics)
+        evaluation_tracker.details_logger.log(
+            task_example_id.task_name, task, doc, model_responses, metrics, (user_prompt, judgement)
+        )
 
     return evaluation_tracker
 
@@ -108,8 +146,9 @@ def make_results_table(result_dict):
 
     values = []
 
-    for k, dic in result_dict["results"].items():
-        version = result_dict["versions"][k]
+    for k in sorted(result_dict["results"].keys()):
+        dic = result_dict["results"][k]
+        version = result_dict["versions"][k] if k in result_dict["versions"] else ""
         for m, v in dic.items():
             if m.endswith("_stderr"):
                 continue

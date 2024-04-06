@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2024 The HuggingFace Team
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import re
 
 from lighteval.metrics.metrics import MetricCategory, Metrics
@@ -58,7 +80,7 @@ def apply_generative_metric(results: list[ModelReturn], formatted_doc: Doc, metr
     # Extracting gold
     try:
         golds = formatted_doc.get_golds()
-    except KeyError:
+    except (KeyError, IndexError):
         golds = None
 
     # Specific process for HELM like evals # hrm
@@ -122,5 +144,16 @@ def apply_multichoice_metric_one_token(results: list[ModelReturn], formatted_doc
                     choices_logprob=choices_logprob, gold_ixs=gold_ixs, formatted_doc=formatted_doc
                 )
             )
+
+    return results, outputs
+
+
+def apply_generative_multi_turn_metric(results: list[ModelReturn], formatted_doc: Doc, metrics: list[str]):
+    outputs = {}
+    predictions = results.pop(0).result
+
+    for metric in metrics:
+        if Metrics[metric].value.category == MetricCategory.GENERATIVE_MULTI_TURN:
+            outputs.update(Metrics[metric].value.compute(predictions=predictions, formatted_doc=formatted_doc))
 
     return results, outputs
