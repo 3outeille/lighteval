@@ -986,7 +986,9 @@ class NanotronLightevalModel(LightevalModel):
                     out = torch.cat(gathered_out, dim=-1)
 
                     #NOTE(fmom): comment out for mamba
-                    # out = out.transpose(0, 1)  # [batch, seq_length, vocab]
+                    if os.environ.get("LIGHTEVAL_TRANSPOSE", "0") == "1":
+                        out = out.transpose(0, 1)  # [batch, seq_length, vocab]
+    
                     multi_logits = F.log_softmax(out, dim=-1)  # [batch, padding_length, vocab]
 
                     logits_sum = []
