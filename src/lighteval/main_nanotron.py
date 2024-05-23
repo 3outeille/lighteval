@@ -121,6 +121,10 @@ def main(
             debug_one_layer_model=False,
             model_class=model_cls,
             env_config=env_config,
+            # For Mamba, set the seqlen here otherwise it will use the tokenizer default which will result in overflow
+            # Because it won't find 'max_position_embeddings' in my 'self.model_configs' as it  inside a dictionary 'attn_cfg'
+            max_length=nanotron_config.tokens.sequence_length,
+            
         )
         model_info = ModelInfo(model_name=f"{nanotron_config.general.run}/{nanotron_config.general.step}")
         evaluation_tracker.general_config_logger.log_model_info(model_info)
